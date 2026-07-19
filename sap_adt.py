@@ -140,14 +140,57 @@ class SAPADTHandler:
     def where_used(self, name, object_type):
         logger.info(f"Finding where-used for {object_type} {name}")
         if not self.csrf_token: self._get_csrf_token()
-        url = f"{self.host}/sap/bc/adt/crossreference/whereused"
-        adt_type = 'clas/oo' if object_type.lower() == 'class' else object_type.lower()
+        
+        object_url = self._get_object_uri(name, object_type)
+        if not object_url:
+            return {"ok": False, "error": f"Unsupported object type: {object_type}"}
+            
+        url = f"{self.host}/sap/bc/adt/repository/informationsystem/usageReferences"
+        headers = {
+            "Accept": "application/*",
+            "Content-Type": "application/*"
+        }
+        
+        body = '''<?xml version="1.0" encoding="ASCII"?>
+<usagereferences:usageReferenceRequest xmlns:usagereferences="http://www.sap.com/adt/ris/usageReferences">
+  <usagereferences:affectedObjects/>
+</usagereferences:usageReferenceRequest>'''
+        
         try:
-            response = self.session.get(url, params={"objectName": name.upper(), "objectType": adt_type})
+            response = self.session.post(
+                url,
+                headers=headers,
+                params={'uri': object_url},
+                data=body.encode('utf-8')
+            )
             response.raise_for_status()
+            
+            results = []
             root = ET.fromstring(response.content)
-            references = [{"name": ref.get('name'), "type": ref.get('type')} for ref in root.findall('.//reference')]
-            return {"ok": True, "object_name": name, "references": references}
+            for ref_obj in root.iter():
+                ref_tag = ref_obj.tag.split('}')[-1] if '}' in ref_obj.tag else ref_obj.tag
+                if ref_tag != 'referencedObject':
+                    continue
+                ref_attrs = {k.split('}')[-1] if '}' in k else k: v for k, v in ref_obj.attrib.items()}
+                ref_uri = ref_attrs.get('uri', '')
+                for child in ref_obj:
+                    child_tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                    if child_tag != 'adtObject':
+                        continue
+                    child_attrs = {k.split('}')[-1] if '}' in k else k: v for k, v in child.attrib.items()}
+                    c_name = child_attrs.get('name', '')
+                    c_type = child_attrs.get('type', '')
+                    c_desc = child_attrs.get('description', '')
+                    if c_name and c_type:
+                        results.append({
+                            'name': c_name,
+                            'type': c_type,
+                            'uri': ref_uri,
+                            'description': c_desc
+                        })
+                    break
+            
+            return {"ok": True, "object_name": name, "references": results}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
