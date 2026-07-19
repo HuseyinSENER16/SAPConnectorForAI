@@ -12,6 +12,7 @@ If you are an AI model or Agent, use these instructions to interact with SAP:
 - **Method & Header:** `POST` with `Content-Type: application/json`
 - **Format:** Request payload and Responses are always JSON.
 - **Rule:** This bridge is strictly **READ-ONLY**.
+- **⚠️ CRITICAL:** Do NOT attempt to run `sap_adt.py` or `app.py` as CLI commands. You must interact with the bridge via HTTP POST requests.
 
 ---
 

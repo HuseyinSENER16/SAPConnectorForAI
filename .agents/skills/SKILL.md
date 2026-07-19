@@ -1,4 +1,4 @@
-﻿---
+---
 name: sap_adt_connector
 description: Interact with SAP ABAP systems through the read-only SAP ADT Python Bridge API.
 ---
@@ -13,6 +13,9 @@ All requests must be sent to the local bridge server:
 - **Base URL:** http://127.0.0.1:8080
 - **Headers:** Content-Type: application/json
 - **Method:** POST
+
+**⚠️ CRITICAL FOR LLMs / AGENTS:**
+Do NOT attempt to run `sap_adt.py` or `app.py` from the command line (e.g. `python sap_adt.py tool/ping`). This is not a CLI tool. You must interact with the SAP bridge EXCLUSIVELY via HTTP POST requests to the Base URL.
 
 ---
 

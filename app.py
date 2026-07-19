@@ -19,7 +19,7 @@ def get_json_or_error():
 def health_check():
     return jsonify(adt_handler.ping())
 
-@app.route('/tool/ping', methods=['POST'])
+@app.route('/tool/ping', methods=['GET', 'POST'])
 def ping():
     return jsonify(adt_handler.ping())
 
