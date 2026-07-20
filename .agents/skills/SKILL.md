@@ -15,7 +15,8 @@ All requests must be sent to the local bridge server:
 - **Method:** GET or POST. (For GET, pass payload as URL query parameters. For POST, use JSON body).
 
 **⚠️ CRITICAL FOR LLMs / AGENTS:**
-Do NOT attempt to run `sap_adt.py` or `app.py` from the command line (e.g. `python sap_adt.py tool/ping`). This is not a CLI tool. You must interact with the SAP bridge EXCLUSIVELY via HTTP GET or POST requests to the Base URL.
+1. Do NOT attempt to run `sap_adt.py` or `app.py` from the command line (e.g. `python sap_adt.py tool/ping`). This is not a CLI tool. You must interact with the SAP bridge EXCLUSIVELY via HTTP GET or POST requests to the Base URL.
+2. **PARAMETER NAMES MUST BE EXACT:** When constructing a GET URL, use the EXACT parameter keys as shown in the "GET Example" below. Do not guess or modify them. For instance, if the payload specifies `"name"`, use `?name=` in the GET URL, never `?object_name=`.
 
 ---
 
@@ -25,6 +26,7 @@ Do NOT attempt to run `sap_adt.py` or `app.py` from the command line (e.g. `pyth
 Verify if the bridge server is active.
 - **Path:** /tool/ping
 - **Payload:** {}
+- **GET Example:** `http://127.0.0.1:8080/tool/ping`
 - **Response Template:**
   {
     "ok": true,
@@ -35,6 +37,7 @@ Verify if the bridge server is active.
 Establish a session and fetch the CSRF token from the SAP system.
 - **Path:** /tool/adt_logon
 - **Payload:** {}
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_logon`
 - **Response Template:**
   {
     "ok": true,
@@ -46,6 +49,7 @@ Establish a session and fetch the CSRF token from the SAP system.
 Perform full connectivity diagnostics.
 - **Path:** /tool/adt_doctor
 - **Payload:** {}
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_doctor`
 - **Response Template:**
   {
     "ok": true,
@@ -74,6 +78,7 @@ Search for SAP development objects (e.g. Classes, Programs, Packages) by name pa
     "query": "ZCL_CUSTOM_SEARCH*",
     "max_results": 50
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_search?query=ZCL_CUSTOM_SEARCH*&max_results=50`
 - **Response Template:**
   {
     "ok": true,
@@ -95,6 +100,7 @@ Find source code containing specific keywords (full-text search).
     "search_term": "SELECT SINGLE",
     "max_results": 50
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_code_search?search_term=SELECT+SINGLE&max_results=50`
 - **Response Template:**
   {
     "ok": true,
@@ -109,6 +115,7 @@ Retrieve a list of all objects inside a specific SAP package.
   {
     "package_name": "ZMY_PACKAGE"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_list_package?package_name=ZMY_PACKAGE`
 - **Response Template:**
   {
     "ok": true,
@@ -129,6 +136,7 @@ Find references and usages of an object in the system.
     "name": "ZCL_MY_CLASS",
     "object_type": "class"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_where_used?name=ZCL_MY_CLASS&object_type=class`
 - **Supported Object Types (object_type):** class, interface, program, include
 - **Response Template:**
   {
@@ -154,6 +162,7 @@ Read the current active source code of an ABAP object.
     "name": "ZCL_MY_CLASS",
     "object_type": "class"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_get_source?name=ZCL_MY_CLASS&object_type=class`
 - **Supported Object Types (object_type):** class, interface, program, include
 - **Response Template:**
   {
@@ -171,6 +180,7 @@ Get the version and revision history of an object.
     "name": "ZCL_MY_CLASS",
     "object_type": "class"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_revisions?name=ZCL_MY_CLASS&object_type=class`
 - **Response Template:**
   {
     "ok": true,
@@ -191,6 +201,7 @@ Run a syntax check on an object without activating changes.
     "name": "ZCL_MY_CLASS",
     "object_type": "class"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_syntax_check?name=ZCL_MY_CLASS&object_type=class`
 - **Response Template:**
   {
     "ok": true,
@@ -206,6 +217,7 @@ List inactive objects for a specific developer.
   {
     "user": "DEVELOPER_USER"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_inactive_objects?user=DEVELOPER_USER`
 - **Response Template:**
   {
     "ok": true,
@@ -220,6 +232,7 @@ Fetch recent ABAP short dumps for system troubleshooting.
   {
     "max_results": 10
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_dumps?max_results=10`
 - **Response Template:**
   {
     "ok": true,
@@ -238,6 +251,7 @@ List transport requests associated with a user.
   {
     "user": "DEVELOPER_USER"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_list_transports?user=DEVELOPER_USER`
 - **Response Template:**
   {
     "ok": true,
@@ -252,6 +266,7 @@ Retrieve orientation and status details for a specific Transport ID.
   {
     "transport_id": "DEVK900001"
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_transport_status?transport_id=DEVK900001`
 - **Response Template:**
   {
     "ok": true,
@@ -273,6 +288,7 @@ Execute a read-only ABAP SQL SELECT query directly against the SAP database.
     "query": "SELECT TRKORR, AS4USER FROM E070",
     "row_limit": 100
   }
+- **GET Example:** `http://127.0.0.1:8080/tool/adt_sql?query=SELECT+TRKORR,+AS4USER+FROM+E070&row_limit=100`
 - **Response Template:**
   {
     "ok": true,
