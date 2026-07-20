@@ -9,10 +9,10 @@ This local Python bridge connects AI tools (LLMs, agents) to an SAP ABAP system 
 If you are an AI model or Agent, use these instructions to interact with SAP:
 
 - **Base URL:** `http://127.0.0.1:8080`
-- **Method & Header:** `POST` with `Content-Type: application/json`
+- **Method & Header:** `POST` with `Content-Type: application/json` or `GET`
 - **Format:** Request payload and Responses are always JSON.
 - **Rule:** This bridge is strictly **READ-ONLY**.
-- **⚠️ CRITICAL:** Do NOT attempt to run `sap_adt.py` or `app.py` as CLI commands. You must interact with the bridge via HTTP POST requests.
+- **⚠️ CRITICAL:** Do NOT attempt to run `sap_adt.py` or `app.py` as CLI commands. You must interact with the bridge via HTTP GET or POST requests.
 
 ---
 
@@ -26,7 +26,7 @@ If you are using this repository with an AI agent or LLM system that supports lo
 
 ## 🛠️ Available Endpoints
 
-All endpoints are prefixed with `/tool/`. Send JSON payloads matching the required parameters.
+All endpoints are prefixed with `/tool/`. They support both **GET** and **POST**. Send JSON payloads in the body for POST, or use URL query parameters for GET.
 
 ### Diagnostics & Connection
 - **`/tool/ping`**: Check bridge liveness. (Body: `{}`)
@@ -58,7 +58,7 @@ All endpoints are prefixed with `/tool/`. Send JSON payloads matching the requir
 - **`/tool/adt_transport_check`**: Pre-write transport check. (Body: `{"transport_id": "TRK90001"}`)
 
 ### Database
-- **`/tool/adt_sql`**: Read-only ABAP SQL SELECT. (Body: `{"query": "SELECT * FROM...", "row_limit": 100}`)
+- **`/tool/adt_sql`**: Read-only freestyle ABAP SQL SELECT query execution. (Body: `{"query": "SELECT * FROM...", "row_limit": 100}`)
 
 ---
 

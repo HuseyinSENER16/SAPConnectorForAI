@@ -11,11 +11,11 @@ This skill allows the AI agent to search, query, and examine SAP ABAP source cod
 
 All requests must be sent to the local bridge server:
 - **Base URL:** http://127.0.0.1:8080
-- **Headers:** Content-Type: application/json
-- **Method:** POST
+- **Headers:** Content-Type: application/json (for POST requests)
+- **Method:** GET or POST. (For GET, pass payload as URL query parameters. For POST, use JSON body).
 
 **⚠️ CRITICAL FOR LLMs / AGENTS:**
-Do NOT attempt to run `sap_adt.py` or `app.py` from the command line (e.g. `python sap_adt.py tool/ping`). This is not a CLI tool. You must interact with the SAP bridge EXCLUSIVELY via HTTP POST requests to the Base URL.
+Do NOT attempt to run `sap_adt.py` or `app.py` from the command line (e.g. `python sap_adt.py tool/ping`). This is not a CLI tool. You must interact with the SAP bridge EXCLUSIVELY via HTTP GET or POST requests to the Base URL.
 
 ---
 
@@ -261,7 +261,33 @@ Retrieve orientation and status details for a specific Transport ID.
 
 ---
 
+---
+
+## 6. Database Queries
+
+### Read-Only SQL Query
+Execute a read-only ABAP SQL SELECT query directly against the SAP database.
+- **Path:** /tool/adt_sql
+- **Payload:**
+  {
+    "query": "SELECT TRKORR, AS4USER FROM E070",
+    "row_limit": 100
+  }
+- **Response Template:**
+  {
+    "ok": true,
+    "rows": [
+      {
+        "TRKORR": "TSDK900001",
+        "AS4USER": "SAP_DEV"
+      }
+    ]
+  }
+
+---
+
 ## Important Constraints
 
 1. Read-Only: This API is strictly read-only. Modifying functions (activation, creating, editing) are not supported.
 2. XML Responses: Many diagnostic and listing endpoints (/tool/adt_revisions, /tool/adt_dumps, /tool/adt_list_transports) return raw XML or truncated XML payloads that need to be parsed by the LLM client or supporting functions.
+

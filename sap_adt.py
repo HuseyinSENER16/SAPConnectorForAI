@@ -8,6 +8,17 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+def _local_tag(tag):
+    return tag.split('}')[-1] if '}' in tag else tag
+
+def _local_attr(elem, attr_name, alt_name=None):
+    for k, v in elem.attrib.items():
+        local_key = k.split('}')[-1]
+        if local_key == attr_name or (alt_name and local_key == alt_name):
+            return v
+    return None
+
+
 class SAPADTHandler:
     def __init__(self):
         self.host = os.getenv("SAP_HOST", "").rstrip("/")
@@ -92,50 +103,189 @@ class SAPADTHandler:
         logger.info(f"Searching objects with query: {query}")
         if not self.csrf_token: self._get_csrf_token()
         url = f"{self.host}/sap/bc/adt/repository/informationsystem/search"
-        params = {"searchTerm": query, "maxResults": max_results}
+        params = {
+            "operation": "quickSearch",
+            "query": query,
+            "maxResults": max_results
+        }
         try:
             response = self.session.get(url, params=params)
             response.raise_for_status()
             root = ET.fromstring(response.content)
             ns = {'adtcore': 'http://www.sap.com/adt/core'}
-            results = [{"name": obj.get('name'), "type": obj.get('type'), "uri": obj.get('uri')} 
+            results = [{"name": _local_attr(obj, 'name'), "type": _local_attr(obj, 'type'), "uri": _local_attr(obj, 'uri')} 
                        for obj in root.findall('.//adtcore:objectReference', ns)]
             return {"ok": True, "query": query, "results": results}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def code_search(self, search_term, max_results=50):
-        """Full-text source search (mock/template for sourceSearch)."""
         logger.info(f"Code search for: {search_term}")
         if not self.csrf_token: self._get_csrf_token()
-        url = f"{self.host}/sap/bc/adt/repository/informationsystem/search"
-        params = {"searchTerm": f"*{search_term}*", "maxResults": max_results}
+        url = f"{self.host}/sap/bc/adt/repository/informationsystem/textSearch"
+        params = {"searchString": search_term, "maxResults": max_results}
         try:
             response = self.session.get(url, params=params)
             response.raise_for_status()
-            return {"ok": True, "message": "Code search executed (results may vary by ADT capability)", "status_code": response.status_code}
+            
+            results = []
+            root = ET.fromstring(response.content)
+            
+            # Look for objectReference tags
+            refs = [e for e in root.iter() if _local_tag(e.tag) == 'objectReference']
+            if refs:
+                for ref in refs:
+                    matches = []
+                    for m in ref.iter():
+                        if _local_tag(m.tag) != 'textSearchResult':
+                            continue
+                        line_raw = _local_attr(m, 'line')
+                        try:
+                            line = int(line_raw) if line_raw is not None else 0
+                        except ValueError:
+                            line = 0
+                        snippet = _local_attr(m, 'snippet') or m.text or ''
+                        matches.append({'line': line, 'snippet': snippet.strip()})
+                    results.append({
+                        'uri': _local_attr(ref, 'uri') or '',
+                        'name': _local_attr(ref, 'name') or '',
+                        'type': _local_attr(ref, 'type') or '',
+                        'description': _local_attr(ref, 'description') or '',
+                        'matches': matches
+                    })
+            else:
+                # Generic fallback for <match> tags
+                for node in root.iter():
+                    if _local_tag(node.tag) != 'match':
+                        continue
+                    line_raw = _local_attr(node, 'line')
+                    try:
+                        line = int(line_raw) if line_raw is not None else 0
+                    except ValueError:
+                        line = 0
+                    snippet = _local_attr(node, 'snippet') or node.text or ''
+                    results.append({
+                        'uri': _local_attr(node, 'uri') or '',
+                        'name': _local_attr(node, 'name') or _local_attr(node, 'objectName') or '',
+                        'type': _local_attr(node, 'type') or '',
+                        'description': '',
+                        'matches': [{'line': line, 'snippet': snippet.strip()}]
+                    })
+            
+            return {"ok": True, "results": results}
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code in (404, 501):
+                return {"ok": False, "error": f"Full-text source code search (textSearch) is not active or supported on this SAP system (HTTP {e.response.status_code})."}
+            return {"ok": False, "error": str(e)}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def list_package(self, package_name):
         logger.info(f"Listing contents of package: {package_name}")
         if not self.csrf_token: self._get_csrf_token()
-        url = f"{self.host}/sap/bc/adt/repository/informationsystem/search"
-        params = {"searchTerm": "*", "packageName": package_name.upper(), "maxResults": 500}
+        url = f"{self.host}/sap/bc/adt/repository/nodestructure"
+        headers = {
+            "Accept": "application/vnd.sap.as+xml, application/vnd.sap.adt.core.v1+xml",
+            "Content-Type": "application/vnd.sap.as+xml"
+        }
+        params = {
+            "parent_type": "DEVC/K",
+            "parent_name": package_name.upper(),
+            "withShortDescriptions": "true"
+        }
         try:
-            response = self.session.get(url, params=params)
+            response = self.session.post(url, headers=headers, params=params, data='')
             response.raise_for_status()
+            
             root = ET.fromstring(response.content)
-            ns = {'adtcore': 'http://www.sap.com/adt/core'}
-            contents = [{"name": obj.get('name'), "type": obj.get('type')} 
-                        for obj in root.findall('.//adtcore:objectReference', ns)]
-            return {"ok": True, "package_name": package_name, "contents": contents}
+            objects = []
+            
+            # Strategy 1: Standard ADT format (adtcore:objectReference)
+            for obj in root.iter():
+                if _local_tag(obj.tag) == 'objectReference':
+                    name = _local_attr(obj, 'name')
+                    obj_type = _local_attr(obj, 'type')
+                    uri = _local_attr(obj, 'uri')
+                    description = _local_attr(obj, 'description') or ''
+                    if name:
+                        objects.append({
+                            'name': name,
+                            'type': obj_type or '',
+                            'uri': uri or '',
+                            'description': description
+                        })
+            
+            # Strategy 2: ABAP XML format (SEU_ADT_REPOSITORY_OBJ_NODE)
+            if not objects:
+                for node in root.iter():
+                    if 'SEU_ADT_REPOSITORY_OBJ_NODE' in node.tag:
+                        obj_type = obj_name = tech_name = description = ''
+                        for child in node:
+                            tag = _local_tag(child.tag)
+                            text = child.text if child.text else ''
+                            if tag == 'OBJECT_TYPE':
+                                obj_type = text
+                            elif tag == 'OBJECT_NAME':
+                                obj_name = text
+                            elif tag == 'TECH_NAME':
+                                tech_name = text
+                            elif tag == 'DESCRIPTION':
+                                description = text
+                        
+                        name = obj_name or tech_name
+                        skip_types = ['DEVC/Q', 'DEVC/N', 'DEVC/K', 'DEVC/DA', 'DEVC/DD', 'DEVC/DE',
+                                     'DEVC/DL', 'DEVC/DS', 'DEVC/DT', 'DEVC/OC', 'DEVC/OI', 'DEVC/WO']
+                        should_skip = any(obj_type.startswith(skip) for skip in skip_types)
+                        if name and obj_type and not should_skip:
+                            objects.append({
+                                'name': name,
+                                'type': obj_type,
+                                'uri': f'/sap/bc/adt/{obj_type.lower().replace("/", "/")}s/{name.lower()}',
+                                'description': description
+                            })
+            
+            return {"ok": True, "package_name": package_name, "contents": objects}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def execute_sql(self, query, row_limit=100):
         logger.info(f"Executing SQL query: {query}")
-        return {"ok": False, "error": "Read-only ABAP SQL SELECT is limited in standard ADT REST. Use RFC for generic data preview."}
+        if not self.csrf_token: self._get_csrf_token()
+        url = f"{self.host}/sap/bc/adt/datapreview/freestyle"
+        headers = {
+            "Accept": "application/vnd.sap.adt.datapreview.table.v1+xml",
+            "Content-Type": "text/plain"
+        }
+        params = {"rowNumber": row_limit}
+        try:
+            response = self.session.post(url, headers=headers, params=params, data=query.encode('utf-8'))
+            response.raise_for_status()
+            
+            root = ET.fromstring(response.content)
+            ns = {'dp': 'http://www.sap.com/adt/dataPreview'}
+            columns = []
+            
+            for col in root.findall('.//dp:columns', ns):
+                meta = col.find('dp:metadata', ns)
+                col_name = meta.get('{http://www.sap.com/adt/dataPreview}name', '') if meta is not None else ''
+                data_cells = [cell.text for cell in col.findall('.//dp:data', ns)]
+                columns.append({
+                    "name": col_name,
+                    "data": data_cells
+                })
+            
+            rows = []
+            if columns:
+                num_rows = len(columns[0]["data"])
+                for i in range(num_rows):
+                    row = {}
+                    for col in columns:
+                        row[col["name"]] = col["data"][i] if i < len(col["data"]) else None
+                    rows.append(row)
+            
+            return {"ok": True, "rows": rows}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def where_used(self, name, object_type):
         logger.info(f"Finding where-used for {object_type} {name}")
@@ -256,10 +406,37 @@ class SAPADTHandler:
         logger.info("Fetching ST22 dumps")
         if not self.csrf_token: self._get_csrf_token()
         url = f"{self.host}/sap/bc/adt/runtime/dumps"
+        headers = {
+            "X-CSRF-Token": self.csrf_token,
+            "Accept": "*/*"
+        }
         try:
-            response = self.session.get(url)
+            response = self.session.get(url, headers=headers)
             response.raise_for_status()
-            return {"ok": True, "message": "Dumps retrieved", "data": response.text[:500]}
+            
+            root = ET.fromstring(response.content)
+            ns = {'a': 'http://www.w3.org/2005/Atom'}
+            dumps = []
+            for entry in root.findall('a:entry', ns):
+                title = entry.findtext('a:title', default='', namespaces=ns)
+                updated = entry.findtext('a:updated', default='', namespaces=ns) or \
+                          entry.findtext('a:published', default='', namespaces=ns)
+                author = entry.findtext('a:author/a:name', default='', namespaces=ns)
+                link = entry.find("a:link", ns)
+                uri = link.get('href') if link is not None else ''
+                cats = [c.get('term') for c in entry.findall('a:category', ns) if c.get('term')]
+                
+                dumps.append({
+                    'title': title.strip() if title else '',
+                    'user': author.strip() if author else '',
+                    'date': updated.strip() if updated else '',
+                    'uri': uri,
+                    'categories': cats
+                })
+                if len(dumps) >= int(max_results):
+                    break
+                    
+            return {"ok": True, "message": "Dumps retrieved successfully", "count": len(dumps), "dumps": dumps}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
